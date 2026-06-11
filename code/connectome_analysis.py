@@ -8,10 +8,11 @@ Requirements:
     pip install networkx bctpy numpy scipy matplotlib seaborn nibabel
 
 Usage:
-    python connectome_analysis.py
-    Edit CONFIG section below to match your dataset.
+    python connectome_analysis.py [options]
+    Run with --help to see all available arguments.
 """
 
+import argparse
 import os
 import pickle
 import warnings
@@ -21,9 +22,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 import networkx as nx
-import scipy.stats as stats
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 try:
     import bct
@@ -33,38 +32,76 @@ except ImportError:
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────
-# CONFIG — edit these to match your dataset
+# CLI ARGUMENT PARSER
 # ─────────────────────────────────────────────
-CONFIG = {
-    # Path to folder containing subject subfolders, or list of .gpickle paths
-    # "gpickle_dir": "./connectomes",
-    "gpickle_dir": "./takahashi/na/cmp-v3.2.0/",
 
-    # Edge weight to use: "fiber_density", "fiber_number", "fiber_length", "FA"
-    "edge_weight": "fiber_density",
+def parse_args() -> dict:
+    parser = argparse.ArgumentParser(
+        description="DWI Structural Connectome Analysis Pipeline",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "gpickle_dir",
+        help="Path to folder containing subject subfolders with .gpickle files",
+    )
+    parser.add_argument(
+        "--edge-weight",
+        default="fiber_density",
+        choices=["fiber_density", "fiber_number", "fiber_length", "FA"],
+        help="Edge weight attribute to use from the connectome graph",
+    )
+    parser.add_argument(
+        "--threshold-pct",
+        type=float,
+        default=0.15,
+        metavar="FLOAT",
+        help="Proportional threshold: keep top fraction of connections (0.0–1.0). Pass 0 to skip.",
+    )
+    parser.add_argument(
+        "--n-rand",
+        type=int,
+        default=100,
+        help="Number of random null networks per subject",
+    )
+    parser.add_argument(
+        "--rand-itr",
+        type=int,
+        default=10,
+        help="Number of rewiring iterations per edge (for randmio_und)",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default="./data/null_cache",
+        help="Directory for null network cache files",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="./data/results",
+        help="Directory to save results",
+    )
+    parser.add_argument(
+        "--no-plot-matrices",
+        action="store_true",
+        help="Disable plotting of adjacency matrices",
+    )
+    parser.add_argument(
+        "--scale-label",
+        default="scale3",
+        help="Parcellation scale label used in filenames and logs",
+    )
 
-    # Proportional threshold: keep top X% of connections (0.0–1.0)
-    # Set to None to skip thresholding
-    "threshold_pct": 0.15,
-
-    # Number of random null networks per subject
-    "n_rand": 100,
-
-    # Number of rewiring iterations per edge (for randmio_und)
-    "rand_itr": 10,
-
-    # Where to save null network cache
-    "cache_dir": "./data/null_cache",
-
-    # Where to save results
-    "output_dir": "./data/results",
-
-    # Plot adjacency matrices?
-    "plot_matrices": True,
-
-    # Parcellation scale label (for filenames/logs)
-    "scale_label": "scale3",
-}
+    args = parser.parse_args()
+    return {
+        "gpickle_dir": args.gpickle_dir,
+        "edge_weight": args.edge_weight,
+        "threshold_pct": args.threshold_pct if args.threshold_pct > 0 else None,
+        "n_rand": args.n_rand,
+        "rand_itr": args.rand_itr,
+        "cache_dir": args.cache_dir,
+        "output_dir": args.output_dir,
+        "plot_matrices": not args.no_plot_matrices,
+        "scale_label": args.scale_label,
+    }
 
 # ─────────────────────────────────────────────
 # LOGGING
@@ -648,7 +685,8 @@ def example_group_comparison(all_results: dict, group1_ids: list, group2_ids: li
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    results = run_pipeline(CONFIG)
+    config = parse_args()
+    results = run_pipeline(config)
 
     # Uncomment and fill in subject IDs to run group comparison:
     # example_group_comparison(
