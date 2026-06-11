@@ -54,10 +54,10 @@ CONFIG = {
     "rand_itr": 10,
 
     # Where to save null network cache
-    "cache_dir": "./null_cache",
+    "cache_dir": "./data/null_cache",
 
     # Where to save results
-    "output_dir": "./results",
+    "output_dir": "./data/results",
 
     # Plot adjacency matrices?
     "plot_matrices": True,
