@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import os
 import pickle
 import warnings
@@ -195,10 +196,23 @@ def compute_null_metrics(
     Results are cached to disk — recalculated only if matrix changes.
     """
     os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, f"{subject_id}_null_n{n_rand}.pkl")
+
+    # Build a stable cache key from matrix content and null-generation params.
+    # This avoids collisions/invalid hits when filenames change.
+    matrix_bytes = np.ascontiguousarray(A).astype(np.float64, copy=False).tobytes()
+    key_material = b"|".join(
+        [
+            matrix_bytes,
+            f"shape={A.shape}".encode("utf-8"),
+            f"n_rand={n_rand}".encode("utf-8"),
+            f"itr={itr}".encode("utf-8"),
+        ]
+    )
+    cache_hash = hashlib.sha256(key_material).hexdigest()[:16]
+    cache_file = os.path.join(cache_dir, f"null_{cache_hash}.pkl")
 
     if os.path.exists(cache_file):
-        log.info(f"  Loading cached null networks: {cache_file}")
+        log.info(f"  Loading cached null networks: {cache_file} (subject={subject_id})")
         with open(cache_file, "rb") as f:
             return pickle.load(f)
 
