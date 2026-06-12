@@ -19,3 +19,9 @@ Run for all types of weights
 source .venv/bin/activate
 bash run_all_weights.sh <SUBJECT_DIR>
 ```
+
+On Windows, use:
+```bat
+call .venv\Scripts\activate.bat
+run_all_weights.bat <SUBJECT_DIR>
+```
