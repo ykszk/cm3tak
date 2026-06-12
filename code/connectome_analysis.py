@@ -65,6 +65,20 @@ def parse_args() -> dict:
         help="Number of random null networks per subject",
     )
     parser.add_argument(
+        "--pipeline-workers",
+        type=int,
+        default=None,
+        metavar="INT",
+        help="Worker count for subject-level pipeline parallelism (default: auto)",
+    )
+    parser.add_argument(
+        "--null-workers",
+        type=int,
+        default=None,
+        metavar="INT",
+        help="Worker count for null-network generation per subject (default: auto)",
+    )
+    parser.add_argument(
         "--rand-itr",
         type=int,
         default=10,
@@ -92,11 +106,19 @@ def parse_args() -> dict:
     )
 
     args = parser.parse_args()
+
+    if args.pipeline_workers is not None and args.pipeline_workers < 1:
+        parser.error("--pipeline-workers must be >= 1")
+    if args.null_workers is not None and args.null_workers < 1:
+        parser.error("--null-workers must be >= 1")
+
     return {
         "gpickle_dir": args.gpickle_dir,
         "edge_weight": args.edge_weight,
         "threshold_pct": args.threshold_pct if args.threshold_pct > 0 else None,
         "n_rand": args.n_rand,
+        "pipeline_workers": args.pipeline_workers,
+        "null_workers": args.null_workers,
         "rand_itr": args.rand_itr,
         "cache_dir": args.cache_dir,
         "output_dir": args.output_dir,
@@ -190,6 +212,7 @@ def compute_null_metrics(
     n_rand: int = 100,
     itr: int = 10,
     cache_dir: str = "./null_cache",
+    n_workers: int | None = None,
 ) -> dict:
     """
     Compute null random network metrics for small-worldness.
@@ -216,7 +239,10 @@ def compute_null_metrics(
         with open(cache_file, "rb") as f:
             return pickle.load(f)
 
-    n_workers = min(n_rand, os.cpu_count() or 1)
+    if n_workers is None:
+        n_workers = min(n_rand, os.cpu_count() or 1)
+    else:
+        n_workers = max(1, min(n_workers, n_rand))
     log.info(f"  Computing {n_rand} null networks for {subject_id} with {n_workers} workers...")
 
     C_rand_list, L_rand_list = [], []
@@ -571,6 +597,7 @@ def _process_one_subject(args):
         n_rand=config["n_rand"],
         itr=config["rand_itr"],
         cache_dir=config["cache_dir"],
+        n_workers=config["null_workers"],
     )
 
     # --- Global metrics ---
@@ -627,7 +654,10 @@ def run_pipeline(config: dict):
 
     all_results = {}
 
-    n_workers = min(len(gpickle_files), os.cpu_count() or 1)
+    if config["pipeline_workers"] is None:
+        n_workers = min(len(gpickle_files), os.cpu_count() or 1)
+    else:
+        n_workers = max(1, min(config["pipeline_workers"], len(gpickle_files)))
     log.info(f"Processing {len(gpickle_files)} subject(s) in parallel with {n_workers} worker(s)...")
 
     with ProcessPoolExecutor(max_workers=n_workers) as pool:
